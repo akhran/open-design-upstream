@@ -472,7 +472,9 @@ function buildExecutionDiagnostics(run) {
       requestedModel: run.model
         ? availableDiagnostic(run.model, 'requested model configuration', true, 'agent-runtime')
         : missingDiagnostic(
-            run.agentId === 'codex' ? 'codex_cli_default_model' : 'requested_model_not_recorded',
+            run.agentId === 'codex' && run.codexModelSelectionSource === 'cli_default'
+              ? 'codex_cli_default_model'
+              : 'requested_model_not_recorded',
             'agent-runtime',
           ),
       requestedReasoning: run.reasoning
@@ -555,6 +557,9 @@ function durableRunState(run) {
     endedWithUnfinishedWork: Boolean(run.endedWithUnfinishedWork),
     ...(typeof run.userPrompt === 'string' ? { userPrompt: run.userPrompt } : {}),
     ...(typeof run.model === 'string' ? { model: run.model } : {}),
+    ...(typeof run.codexModelSelectionSource === 'string'
+      ? { codexModelSelectionSource: run.codexModelSelectionSource }
+      : {}),
     ...(typeof run.resolvedModelId === 'string'
       ? { resolvedModelId: run.resolvedModelId }
       : {}),
