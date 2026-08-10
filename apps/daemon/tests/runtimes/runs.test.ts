@@ -836,7 +836,7 @@ describe('chat run service shutdown', () => {
     expect(JSON.stringify(status)).not.toContain('server.js');
   });
 
-  it('cancels active runs and terminates their child process during daemon shutdown', async () => {
+  it('fails active runs with a daemon-shutdown diagnostic and terminates their child', async () => {
     const runs = createRuns();
     const child = new FakeChildProcess({ closeOn: 'SIGTERM' });
     const run = runs.create({ projectId: 'project-1', conversationId: 'conv-1' });
@@ -847,13 +847,28 @@ describe('chat run service shutdown', () => {
     await runs.shutdownActive({ graceMs: 10 });
 
     expect(child.signals).toEqual(['SIGTERM']);
-    expect(run.status).toBe('canceled');
-    expect(run.cancelRequested).toBe(true);
-    expect(run.signal).toBe('SIGTERM');
-    await expect(wait).resolves.toMatchObject({ status: 'canceled', signal: 'SIGTERM' });
+    expect(run.status).toBe('failed');
+    expect(run.cancelRequested).toBe(false);
+    await expect(wait).resolves.toMatchObject({
+      status: 'failed',
+      signal: null,
+      errorCode: 'DAEMON_SHUTDOWN',
+      failureCategory: 'process_exit',
+      failureDetail: 'interrupted',
+      failureAction: 'retry',
+    });
+    expect(run.events.at(-2)).toMatchObject({
+      event: 'error',
+      data: { error: { code: 'DAEMON_SHUTDOWN' } },
+    });
     expect(run.events.at(-1)).toMatchObject({
       event: 'end',
-      data: { status: 'canceled', signal: 'SIGTERM' },
+      data: {
+        status: 'failed',
+        signal: null,
+        failureCategory: 'process_exit',
+        failureDetail: 'interrupted',
+      },
     });
   });
 
@@ -867,7 +882,8 @@ describe('chat run service shutdown', () => {
     await runs.shutdownActive({ graceMs: 1 });
 
     expect(child.signals).toEqual(['SIGTERM', 'SIGKILL']);
-    expect(run.status).toBe('canceled');
+    expect(run.status).toBe('failed');
+    expect(run.cancelRequested).toBe(false);
   });
 
   it('uses adapter abort before process signals for ACP-style runs', async () => {
@@ -883,7 +899,8 @@ describe('chat run service shutdown', () => {
 
     expect(abort).toHaveBeenCalledTimes(1);
     expect(child.signals).toEqual(['SIGTERM']);
-    expect(run.status).toBe('canceled');
+    expect(run.status).toBe('failed');
+    expect(run.cancelRequested).toBe(false);
   });
 
   it('closes child stdin for active runs during shutdown before signaling them', async () => {
